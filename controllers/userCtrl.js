@@ -1,11 +1,14 @@
 const Users = require("../models/userSchemaAndModel");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 const userCtrl = {
+  // registering user
   registerUser: async (req, res) => {
     try {
       // get all the values
       const { name, email, password } = req.body;
+
       // check if any field is empty
       if (!name || !email || !password)
         return res.status(400).json({ msg: "Fill all the input!" });
@@ -35,9 +38,58 @@ const userCtrl = {
       return res.status(500).json({ msg: error.message });
     }
   },
-  loginUser: (req, res) => {
+  loginUser: async (req, res) => {
     try {
-      res.json({ msg: "Login a user" });
+      // get all the values
+      const { email, password } = req.body;
+
+      // check if any field is empty
+      if (!email || !password)
+        return res.status(400).json({ msg: "Fill all the input!" });
+
+      // checking the database weather user exist or not
+      const findUser = await Users.findOne({ email: email });
+
+      // if user not found
+      if (!findUser) return res.status(400).json({ msg: "User not found!" });
+
+      // if user found
+      if (findUser) {
+        // password comparing
+        const isMatch = await bcrypt.compare(password, findUser.password);
+
+        // if password not match
+        if (!isMatch)
+          return res.status(400).json({ msg: "Invalid password !" });
+      }
+
+      // if password and email is correct create token
+      const payload = { id: findUser._id, name: findUser.name };
+      const token = jwt.sign(payload, process.env.SECRET_KEY, {
+        expiresIn: "1d",
+      });
+      res.json({ token });
+
+      // res.json({ msg: "Login a user" });
+    } catch (error) {
+      return res.status(500).json({ msg: error.message });
+    }
+  },
+  verifyToken: (req, res) => {
+    try {
+      const token = req.header("Authorization");
+      //if token not present
+      if (!token) return res.send(false);
+      // if token present
+      jwt.verify(token, process.env.SECRET_KEY, async (err, verified) => {
+        // if token not match
+        if (err) return res.send(false);
+        // if token match
+        const user = await Users.findById(verified.id);
+        if (!user) return res.send(false);
+
+        return res.send(true);
+      });
     } catch (error) {
       return res.status(500).json({ msg: error.message });
     }
